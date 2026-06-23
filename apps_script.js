@@ -527,3 +527,74 @@ function installerDeclencheur() {
     .timeBased().everyDays(1).atHour(7).create();
   SpreadsheetApp.getUi().alert("✅ Déclencheur installé à 7h chaque jour");
 }
+
+
+// ============================================================
+//  DEBUG — Exécutez cette fonction pour diagnostiquer
+//  Sélectionnez "debugDates" dans le menu déroulant → ▶️ Exécuter
+// ============================================================
+function debugDates() {
+  try {
+    var ss      = SpreadsheetApp.openById(SHEET_ID);
+    var sr      = ss.getSheetByName(SHEET_REPONSES);
+    var sv      = ss.getSheetByName(SHEET_VENDORS);
+    var today   = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
+    var rows    = sr ? sr.getDataRange().getValues() : [];
+    var vrows   = sv ? sv.getDataRange().getValues() : [];
+
+    var msg = "=== DEBUG FANMILK ===\n\n";
+    msg += "📅 Aujourd'hui : " + today + "\n";
+    msg += "📋 Lignes Reponses : " + (rows.length - 1) + "\n";
+    msg += "👤 Lignes Vendors : " + (vrows.length - 1) + "\n\n";
+
+    // Format des 3 premières dates dans Réponses
+    msg += "--- Format dates Réponses ---\n";
+    for (var i = 1; i <= Math.min(5, rows.length-1); i++) {
+      var val  = rows[i][0];
+      var type = typeof val;
+      var str  = val instanceof Date
+        ? Utilities.formatDate(val, TIMEZONE, "dd/MM/yyyy")
+        : String(val).trim();
+      var match = str === today ? " ← AUJOURD'HUI ✅" : "";
+      msg += "L" + i + " [" + type + "] → '" + str + "'" + match + "\n";
+    }
+
+    // Compter les lignes du jour
+    var countToday = 0;
+    for (var j = 1; j < rows.length; j++) {
+      var v2   = rows[j][0];
+      var str2 = v2 instanceof Date
+        ? Utilities.formatDate(v2, TIMEZONE, "dd/MM/yyyy")
+        : String(v2).trim();
+      if (str2 === today) countToday++;
+    }
+    msg += "\nLignes du jour (" + today + ") : " + countToday + "\n";
+
+    // Compter "Aucun probleme"
+    var aucunPb = 0;
+    for (var k = 1; k < rows.length; k++) {
+      if (String(rows[k][12]||"").trim() === "Aucun probleme") aucunPb++;
+    }
+    msg += "\n'Aucun probleme' total : " + aucunPb + "\n";
+
+    // Statuts du jour
+    msg += "\n--- Statuts du jour ---\n";
+    var statuts = {};
+    for (var l = 1; l < rows.length; l++) {
+      var v3   = rows[l][0];
+      var str3 = v3 instanceof Date
+        ? Utilities.formatDate(v3, TIMEZONE, "dd/MM/yyyy")
+        : String(v3).trim();
+      if (str3 !== today) continue;
+      var stat = String(rows[l][6]||"").trim();
+      statuts[stat] = (statuts[stat]||0) + 1;
+    }
+    Object.keys(statuts).forEach(function(s) {
+      msg += s + " : " + statuts[s] + "\n";
+    });
+
+    SpreadsheetApp.getUi().alert(msg);
+  } catch(e) {
+    SpreadsheetApp.getUi().alert("Erreur debug: " + e.message + "\n" + e.stack);
+  }
+}
