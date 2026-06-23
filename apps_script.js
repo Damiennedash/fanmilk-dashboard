@@ -560,32 +560,21 @@ function onOpen() {
 
 function testerAPI() {
   try {
-    var d = buildData();
+    var d  = buildData();
     var ov = d.overview;
-    SpreadsheetApp.getUi().alert(
-      "✅ API OK — " + d.today_date + "\n\n" +
-      "── MTD ─────────────────────\n" +
-      "💰 Total ventes : "        + ov.total_ventes_mtd   + " FCFA\n" +
-      "🍦 Total pièces : "        + ov.total_pieces_mtd   + "\n" +
-      "👤 Vendors actifs : "      + ov.nb_vendors_actifs  + "\n" +
-      "📊 Avg ventes/vendor : "   + ov.avg_ventes_vendor  + " FCFA\n" +
-      "📦 QPVD : "               + ov.qpvd               + " pièces\n" +
-      "📅 Avg jours : "           + ov.avg_jours          + " jours\n" +
-      "⭐ Satisfaction : "        + d.satisfaction.rate   + "%\n\n" +
-      "── AUJOURD'HUI ─────────────\n" +
-      "💬 Interactions : "        + ov.interactions_today + "\n" +
-      "👥 Vendors uniques : "     + ov.vendors_today      + "\n" +
-      "✅ Déjà vendu : "          + ov.vendors_qui_vendent + " vendors\n" +
-      "💰 Ventes du jour : "      + ov.ventes_today       + " FCFA\n" +
-      "🍦 Pièces du jour : "      + ov.pieces_today       + "\n" +
-      "⚙️ Pb équipement auj. : "  + ov.pb_equip_today     + "\n\n" +
-      "── DONNÉES ─────────────────\n" +
-      "🏪 Dépôts : "              + d.depots.length       + "\n" +
-      "📍 Hotspots : "            + d.hotspots.length     + "\n" +
-      "📈 Semaines QPVD : "       + d.weekly.length
-    );
+    // Utilise Logger.log — visible dans "Journal d'exécution"
+    Logger.log("=== API OK === " + d.today_date);
+    Logger.log("MTD: ventes=" + ov.total_ventes_mtd + " pieces=" + ov.total_pieces_mtd);
+    Logger.log("MTD: vendors=" + ov.nb_vendors_actifs + " avgVentes=" + ov.avg_ventes_vendor);
+    Logger.log("MTD: qpvd=" + ov.qpvd + " avgJours=" + ov.avg_jours);
+    Logger.log("MTD: satisfaction=" + d.satisfaction.rate + "% (" + d.satisfaction.aucun_probleme + "/" + d.satisfaction.total_decla + ")");
+    Logger.log("TODAY: interactions=" + ov.interactions_today + " vendors=" + ov.vendors_today);
+    Logger.log("TODAY: vendorsQuiVendent=" + ov.vendors_qui_vendent + " ventes=" + ov.ventes_today);
+    Logger.log("TODAY: pieces=" + ov.pieces_today + " pbEquip=" + ov.pb_equip_today);
+    Logger.log("DATA: depots=" + d.depots.length + " hotspots=" + d.hotspots.length + " weekly=" + d.weekly.length);
+    Logger.log("=== FIN ===");
   } catch(e) {
-    SpreadsheetApp.getUi().alert("Erreur: " + e.message + "\n" + e.stack);
+    Logger.log("ERREUR testerAPI: " + e.message + " | " + e.stack);
   }
 }
 
@@ -605,41 +594,51 @@ function installerDeclencheur() {
 // ============================================================
 function diagComplet() {
   try {
-    var ss  = SpreadsheetApp.openById(SHEET_ID);
-    var sr  = ss.getSheetByName(SHEET_REPONSES);
+    var ss    = SpreadsheetApp.openById(SHEET_ID);
+    var sr    = ss.getSheetByName(SHEET_REPONSES);
     var today = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
-    var msg = "TODAY = " + today + "\n\n";
 
-    if (!sr) { SpreadsheetApp.getUi().alert("ERREUR: Onglet '" + SHEET_REPONSES + "' introuvable !"); return; }
+    Logger.log("TODAY = " + today);
+
+    if (!sr) { Logger.log("ERREUR: Onglet introuvable: " + SHEET_REPONSES); return; }
 
     var vals = sr.getDataRange().getValues();
-    msg += "Nb lignes total : " + (vals.length - 1) + "\n\n";
+    Logger.log("Nb lignes Reponses: " + (vals.length - 1));
 
-    // Afficher les 3 premières valeurs de date brutes
-    msg += "--- 3 premières dates brutes ---\n";
-    for (var i = 1; i <= Math.min(3, vals.length-1); i++) {
-      var raw = vals[i][0];
-      var type = Object.prototype.toString.call(raw);
+    // 5 premières dates brutes
+    for (var i = 1; i <= Math.min(5, vals.length-1); i++) {
+      var raw       = vals[i][0];
+      var type      = Object.prototype.toString.call(raw);
       var converted = toDateStr(raw);
-      msg += "L" + i + ": type=" + type + "\n  valeur brute=" + raw + "\n  converti=" + converted + "\n  match today=" + (converted === today) + "\n\n";
+      Logger.log("L"+i+" type="+type+" brut="+raw+" converti="+converted+" matchToday="+(converted===today));
     }
 
-    // Compter combien matchent today
+    // Compter lignes du jour
     var countToday = 0;
     for (var j = 1; j < vals.length; j++) {
       if (toDateStr(vals[j][0]) === today) countToday++;
     }
-    msg += "Lignes matchant aujourd'hui : " + countToday + "\n";
+    Logger.log("Lignes du jour: " + countToday);
 
-    // Compter "Aucun probleme"
+    // Compter Aucun probleme
     var aucun = 0;
     for (var k = 1; k < vals.length; k++) {
       if (String(vals[k][12]||"").trim() === "Aucun probleme") aucun++;
     }
-    msg += "Lignes 'Aucun probleme' : " + aucun + "\n";
+    Logger.log("Aucun probleme total: " + aucun);
 
-    SpreadsheetApp.getUi().alert(msg);
+    // Mois courant
+    var month = Utilities.formatDate(new Date(), TIMEZONE, "MM/yyyy");
+    var countMonth = 0;
+    for (var l = 1; l < vals.length; l++) {
+      var ds = toDateStr(vals[l][0]);
+      var p  = ds.split("/");
+      if (p.length >= 3 && (p[1]+"/"+p[2]) === month) countMonth++;
+    }
+    Logger.log("Lignes du mois ("+month+"): " + countMonth);
+    Logger.log("=== DIAG FIN ===");
+
   } catch(e) {
-    SpreadsheetApp.getUi().alert("ERREUR: " + e.message);
+    Logger.log("ERREUR diagComplet: " + e.message);
   }
 }
