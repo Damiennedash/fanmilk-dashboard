@@ -5,7 +5,7 @@
 
 var SHEET_ID       = "1SxJcVdSTWfeG_v6ey9gCSKgqSgqhKlbbcbp5cLZEnn4";
 var SHEET_VENDORS  = "Vendors";
-var SHEET_REPONSES = "Reponses Vendors";
+var SHEET_REPONSES = "Réponses Vendors";
 var TIMEZONE       = "Africa/Lome";
 
 // Colonnes Reponses Vendors (A=0)
