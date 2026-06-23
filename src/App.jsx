@@ -155,25 +155,28 @@ export default function App() {
     return ()=>clearInterval(t);
   },[loadData]);
 
+  const ov          = data?.overview??{};
   const vendors     = data?.vendors??[];
   const weekly      = (data?.weekly??[]).map(w=>({...w,target:TARGET}));
   const today       = data?.today??{};
   const depots      = data?.depots??[];
   const depotToday  = data?.depot_today??[];
   const satisfaction= data?.satisfaction??{rate:0};
-  const equipment   = data?.equipment??{issues_mois:0,jours_perdus:0,semaines:0,heures:0};
+  const equipment   = data?.equipment??{issues_mois:0,issues_today:0,jours_perdus:0,semaines:0,heures:0};
   const hotspots    = data?.hotspots??[];
   const problems    = data?.problems??[];
   const mve         = data?.morning_vs_evening??{};
 
   const ranked      = [...vendors].sort((a,b)=>b.ventes-a.ventes);
-  const totalVentes = vendors.reduce((s,v)=>s+v.ventes,0);
-  const totalXtra   = vendors.reduce((s,v)=>s+v.fanxtra,0);
-  const totalChoco  = vendors.reduce((s,v)=>s+v.fanchoco,0);
-  const totalVan    = vendors.reduce((s,v)=>s+v.fanvanille,0);
-  const totalSku    = totalXtra+totalChoco+totalVan;
-  const avgJours    = vendors.length?Math.round(vendors.reduce((s,v)=>s+v.jours,0)/vendors.length):0;
-  const avgQPVD     = vendors.length?Math.round(totalSku/vendors.length):0;
+  // Valeurs calculées côté Apps Script (robustes)
+  const totalVentes = ov.total_ventes_mtd  ?? vendors.reduce((s,v)=>s+v.ventes,0);
+  const totalXtra   = ov.total_xtra_mtd    ?? vendors.reduce((s,v)=>s+v.fanxtra,0);
+  const totalChoco  = ov.total_choco_mtd   ?? vendors.reduce((s,v)=>s+v.fanchoco,0);
+  const totalVan    = ov.total_van_mtd     ?? vendors.reduce((s,v)=>s+v.fanvanille,0);
+  const totalSku    = ov.total_pieces_mtd  ?? (totalXtra+totalChoco+totalVan);
+  const avgJours    = ov.avg_jours         ?? 0;
+  const avgQPVD     = ov.qpvd             ?? 0;
+  const avgVentes   = ov.avg_ventes_vendor ?? 0;
 
   // Bar chart dépôts (sales)
   const depotBarData = depots.slice(0,6).map(d=>({
@@ -271,10 +274,18 @@ export default function App() {
         {/* ══ OVERVIEW ══ */}
         {tab==="overview"&&(<>
           <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
-            <KpiCard label="Total Sales MTD"   value={`${fmt(totalVentes)} FCFA`}  sub="All depots"            accent={C.blue}   icon="💰"/>
-            <KpiCard label="Avg QPVD"          value={avgQPVD}                      sub={`Target: ${TARGET}/day`} accent={C.teal}   icon="📦"/>
-            <KpiCard label="Avg Days Worked"   value={`${avgJours}d`}               sub="Target: 27+/mo"        accent={C.orange} icon="📅"/>
-            <KpiCard label="Active Vendors"    value={vendors.length}               sub="This month"            accent={C.blueL}  icon="👤"/>
+            <KpiCard label="Total Sales MTD"     value={`${fmt(totalVentes)} FCFA`}   sub="All depots — this month"      accent={C.blue}   icon="💰"/>
+            <KpiCard label="Avg Sales / Vendor"  value={`${fmt(avgVentes)} FCFA`}     sub={`${ov.nb_vendors_actifs??0} active vendors`} accent={C.teal}   icon="📊"/>
+            <KpiCard label="Avg QPVD"            value={avgQPVD}                       sub={`Target: ${TARGET} units/day`} accent={C.purple} icon="📦"/>
+            <KpiCard label="Avg Days Worked"     value={`${avgJours}d`}               sub="Target: 27+/mo"               accent={C.orange} icon="📅"/>
+          </div>
+
+          {/* Ventes du jour */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+            <KpiCard label="Sales TODAY"         value={`${fmt(ov.ventes_today??0)} FCFA`}    sub={`${ov.vendors_qui_vendent??0} vendors sold today`} accent={C.green}  icon="💰"/>
+            <KpiCard label="Units TODAY"         value={ov.pieces_today??0}                    sub={`Xtra ${ov.xtra_today??0} · Choco ${ov.choco_today??0} · Van. ${ov.van_today??0}`} accent={C.teal} icon="🍦"/>
+            <KpiCard label="Vendors Today"       value={ov.vendors_today??0}                   sub={`${ov.interactions_today??0} total interactions`} accent={C.blueL}  icon="👤"/>
+            <KpiCard label="Equipment TODAY"     value={(ov.pb_equip_today??0)===0?"✅ 0":"⚠️ "+(ov.pb_equip_today??0)} sub={(ov.pb_equip_today??0)>0?"Issues reported today":"Zero issues today"} accent={(ov.pb_equip_today??0)>0?C.red:C.green} icon="⚙️"/>
           </div>
 
           {/* Satisfaction + Equipment */}
@@ -294,8 +305,8 @@ export default function App() {
               borderRadius:12,padding:"14px 12px"}}>
               <H>⚙️ Equipment</H>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                {[["Issues/mo",equipment.issues_mois??0],["Days lost",equipment.jours_perdus??0],
-                  ["Weeks",equipment.semaines??0],["Hours",equipment.heures??0]].map(([l,v])=>(
+                {[["Issues today",(equipment.issues_today??0)],["Issues/mo",(equipment.issues_mois??0)],
+                  ["Days lost",equipment.jours_perdus??0],["Hours",equipment.heures??0]].map(([l,v])=>(
                   <div key={l} style={{textAlign:"center",background:"#f0f7ff",borderRadius:8,padding:"8px 4px"}}>
                     <div style={{fontSize:20,fontWeight:900,color:v>0?C.red:C.green}}>{v}</div>
                     <div style={{fontSize:9,color:C.muted,fontWeight:700,textTransform:"uppercase"}}>{l}</div>
@@ -304,7 +315,7 @@ export default function App() {
               </div>
               <div style={{textAlign:"center"}}>
                 <Badge color={equipment.statut==="OK"?C.green:C.red}>
-                  {equipment.statut==="OK"?"✅ Zero downtime":"⚠️ Issues detected"}
+                  {(equipment.issues_today??0)>0?"🔴 Issue TODAY!":equipment.statut==="OK"?"✅ Zero downtime":"⚠️ "+equipment.issues_mois+" issue(s) this month"}
                 </Badge>
               </div>
             </div>
