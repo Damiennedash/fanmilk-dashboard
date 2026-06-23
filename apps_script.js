@@ -597,3 +597,49 @@ function installerDeclencheur() {
     .timeBased().everyDays(1).atHour(7).create();
   SpreadsheetApp.getUi().alert("✅ Déclencheur installé à 7h chaque jour");
 }
+
+
+// ============================================================
+//  DIAGNOSTIC COMPLET — Exécutez cette fonction
+//  Menu déroulant → diagComplet → ▶️ Exécuter
+// ============================================================
+function diagComplet() {
+  try {
+    var ss  = SpreadsheetApp.openById(SHEET_ID);
+    var sr  = ss.getSheetByName(SHEET_REPONSES);
+    var today = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
+    var msg = "TODAY = " + today + "\n\n";
+
+    if (!sr) { SpreadsheetApp.getUi().alert("ERREUR: Onglet '" + SHEET_REPONSES + "' introuvable !"); return; }
+
+    var vals = sr.getDataRange().getValues();
+    msg += "Nb lignes total : " + (vals.length - 1) + "\n\n";
+
+    // Afficher les 3 premières valeurs de date brutes
+    msg += "--- 3 premières dates brutes ---\n";
+    for (var i = 1; i <= Math.min(3, vals.length-1); i++) {
+      var raw = vals[i][0];
+      var type = Object.prototype.toString.call(raw);
+      var converted = toDateStr(raw);
+      msg += "L" + i + ": type=" + type + "\n  valeur brute=" + raw + "\n  converti=" + converted + "\n  match today=" + (converted === today) + "\n\n";
+    }
+
+    // Compter combien matchent today
+    var countToday = 0;
+    for (var j = 1; j < vals.length; j++) {
+      if (toDateStr(vals[j][0]) === today) countToday++;
+    }
+    msg += "Lignes matchant aujourd'hui : " + countToday + "\n";
+
+    // Compter "Aucun probleme"
+    var aucun = 0;
+    for (var k = 1; k < vals.length; k++) {
+      if (String(vals[k][12]||"").trim() === "Aucun probleme") aucun++;
+    }
+    msg += "Lignes 'Aucun probleme' : " + aucun + "\n";
+
+    SpreadsheetApp.getUi().alert(msg);
+  } catch(e) {
+    SpreadsheetApp.getUi().alert("ERREUR: " + e.message);
+  }
+}
