@@ -1,11 +1,9 @@
 // ============================================================
-//  FANMILK TOGO — Apps Script Web App v3
-//  Corrections :
-//  ✅ Déclarations = vendors uniques du jour (pas lignes)
-//  ✅ Ventes aujourd'hui = seulement "J ai deja vendu" du jour
-//  ✅ Sales par dépôt depuis Réponses (plus fiable que Vendors)
-//  ✅ Doublons ignorés (même vendor 2x dans la journée)
-//  ✅ FCFA partout
+//  FANMILK TOGO — Apps Script Web App v4
+//  RÈGLE VENTES :
+//  "Je vais vendre"    → chiffres = VENTES D'HIER (veille)
+//  "Je ne vends pas"   → chiffres = VENTES D'HIER (veille)
+//  "J ai deja vendu"   → chiffres = VENTES D'AUJOURD'HUI
 // ============================================================
 
 var SHEET_ID       = "COLLEZ_VOTRE_SHEET_ID_ICI";
@@ -13,49 +11,50 @@ var SHEET_VENDORS  = "Vendors";
 var SHEET_REPONSES = "Reponses Vendors";
 var TIMEZONE       = "Africa/Lome";
 
-// Colonnes Vendors (A=0)
 var V_PHONE=0,V_NOM=1,V_DEPOT=2,V_LAST_DEC=3;
 var V_VENTES=4,V_FANXTRA=5,V_FANCHOCO=6,V_FANVAN=7,V_PIECES=8,V_DATE_V=9;
 
-// Colonnes Reponses Vendors (A=0)
 var R_DATE=0,R_HEURE=1,R_PERIODE=2,R_PHONE=3,R_NOM=4,R_DEPOT=5;
 var R_STATUT=6,R_VENTES=7,R_XTRA=8,R_CHOCO=9,R_VAN=10;
 var R_LIEU=11,R_CAT=12,R_PRIME=13,R_COMM=14;
 
+// Statuts = ventes d'AUJOURD'HUI
+var STATUTS_AUJOURD_HUI = ["J ai deja vendu"];
+// Statuts = ventes de la VEILLE
+var STATUTS_HIER = ["Je vais vendre", "Non"];
 
-// ============================================================
-//  POINT D'ENTRÉE
-// ============================================================
+
 function doGet(e) {
   try {
-    var output = ContentService.createTextOutput(JSON.stringify(buildData()));
-    output.setMimeType(ContentService.MimeType.JSON);
-    return output;
-  } catch(err) {
-    var out = ContentService.createTextOutput(JSON.stringify({error:err.message}));
+    var out = ContentService.createTextOutput(JSON.stringify(buildData()));
     out.setMimeType(ContentService.MimeType.JSON);
     return out;
+  } catch(err) {
+    var e2 = ContentService.createTextOutput(JSON.stringify({error:err.message}));
+    e2.setMimeType(ContentService.MimeType.JSON);
+    return e2;
   }
 }
 
 
-// ============================================================
-//  DONNÉES PRINCIPALES
-// ============================================================
 function buildData() {
   var ss         = SpreadsheetApp.openById(SHEET_ID);
   var vendorRows = readSheet(ss, SHEET_VENDORS);
   var repRows    = readSheet(ss, SHEET_REPONSES);
   var today      = Utilities.formatDate(new Date(), TIMEZONE, "dd/MM/yyyy");
+  var yesterday  = getYesterday(today);
 
   return {
     updated_at         : new Date().toISOString(),
     today_date         : today,
+    yesterday_date     : yesterday,
     vendors            : buildVendors(vendorRows, repRows),
     weekly             : buildWeekly(repRows),
     today              : buildToday(repRows, today),
-    depots             : buildDepots(repRows),        // ← depuis Réponses
-    depot_today        : buildDepotToday(repRows, today), // ← ventes du jour par dépôt
+    yesterday          : buildYesterday(repRows, today, yesterday),
+    depots             : buildDepots(repRows),
+    depot_today        : buildDepotByDay(repRows, today, "today"),
+    depot_yesterday    : buildDepotByDay(repRows, today, "yesterday"),
     problems           : buildProblems(repRows, today),
     prime              : buildPrime(repRows),
     hotspots           : buildHotspots(repRows),
@@ -72,34 +71,38 @@ function readSheet(ss, name) {
   return v.length>1 ? v.slice(1).filter(function(r){return String(r[0]||"").trim();}) : [];
 }
 
+// Calcule la date d'hier en dd/MM/yyyy
+function getYesterday(todayStr) {
+  var p = todayStr.split("/");
+  var d = new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0]));
+  d.setDate(d.getDate()-1);
+  var dd = d.getDate()<10?"0"+d.getDate():String(d.getDate());
+  var mm = (d.getMonth()+1)<10?"0"+(d.getMonth()+1):String(d.getMonth()+1);
+  return dd+"/"+mm+"/"+d.getFullYear();
+}
+
+// Est-ce que ce statut correspond aux ventes du jour ?
+function isVenteAujourdHui(statut) {
+  return STATUTS_AUJOURD_HUI.indexOf(statut) !== -1;
+}
+
+// Est-ce que ce statut correspond aux ventes de la veille ?
+function isVenteHier(statut) {
+  return STATUTS_HIER.indexOf(statut) !== -1;
+}
+
 
 // ============================================================
 //  VENDORS — jours réels depuis Réponses
 // ============================================================
 function buildVendors(vendorRows, repRows) {
-  // Compter jours uniques par phone depuis Réponses
   var joursParPhone = {};
-  // Calculer ventes totales réelles par phone (seulement "J ai deja vendu")
-  var ventesParPhone = {};
-
   repRows.forEach(function(r) {
     var ph   = String(r[R_PHONE]||"").trim();
     var date = String(r[R_DATE] ||"").trim();
-    var stat = String(r[R_STATUT]||"").trim();
     if (!ph || !date) return;
-
-    // Jours uniques
     if (!joursParPhone[ph]) joursParPhone[ph] = {};
     joursParPhone[ph][date] = true;
-
-    // Ventes réelles = seulement quand "J ai deja vendu" (ventes du jour même)
-    if (stat === "J ai deja vendu") {
-      if (!ventesParPhone[ph]) ventesParPhone[ph] = {ventes:0, fx:0, fc:0, fv:0};
-      ventesParPhone[ph].ventes += parseInt(r[R_VENTES])||0;
-      ventesParPhone[ph].fx     += parseInt(r[R_XTRA])  ||0;
-      ventesParPhone[ph].fc     += parseInt(r[R_CHOCO]) ||0;
-      ventesParPhone[ph].fv     += parseInt(r[R_VAN])   ||0;
-    }
   });
 
   return vendorRows.map(function(r) {
@@ -107,16 +110,16 @@ function buildVendors(vendorRows, repRows) {
     var fanxtra  = parseInt(r[V_FANXTRA]) ||0;
     var fanchoco = parseInt(r[V_FANCHOCO])||0;
     var fanvan   = parseInt(r[V_FANVAN])  ||0;
-    var pieces   = parseInt(r[V_PIECES])  ||(fanxtra+fanchoco+fanvan);
-    var ventes   = parseInt(r[V_VENTES])  ||0;
     var jours    = joursParPhone[phone]
       ? Object.keys(joursParPhone[phone]).length : 0;
-
     return {
-      phone:String(r[V_PHONE]||"").trim(), nom:String(r[V_NOM]||"").trim(),
-      depot:String(r[V_DEPOT]||"").trim(), last_decl:String(r[V_LAST_DEC]||"").trim(),
-      ventes:ventes, fanxtra:fanxtra, fanchoco:fanchoco, fanvanille:fanvan,
-      pieces:pieces, jours:jours, prev_ventes:0,
+      phone:phone, nom:String(r[V_NOM]||"").trim(),
+      depot:String(r[V_DEPOT]||"").trim(),
+      last_decl:String(r[V_LAST_DEC]||"").trim(),
+      ventes:parseInt(r[V_VENTES])||0,
+      fanxtra:fanxtra, fanchoco:fanchoco, fanvanille:fanvan,
+      pieces:parseInt(r[V_PIECES])||(fanxtra+fanchoco+fanvan),
+      jours:jours, prev_ventes:0,
       last_date:String(r[V_DATE_V]||"").trim(),
     };
   }).filter(function(v){return v.nom;});
@@ -124,132 +127,116 @@ function buildVendors(vendorRows, repRows) {
 
 
 // ============================================================
-//  TODAY — vendors UNIQUES + ventes réelles du jour
-//  ✅ "Je vais vendre" avec chiffres = ventes d'HIER → ne pas compter dans today
-//  ✅ "J ai deja vendu" = ventes d'AUJOURD'HUI → compter
-//  ✅ 1 seul comptage par vendor (le dernier du jour)
+//  TODAY — uniquement "J'ai déjà vendu" du jour
 // ============================================================
 function buildToday(rows, today) {
   var todayRows = rows.filter(function(r){
     return String(r[R_DATE]||"").trim() === today;
   });
 
-  // Un dict par phone → garder la dernière déclaration du jour
+  // Un seul enregistrement par vendor (le dernier)
   var parPhone = {};
-  todayRows.forEach(function(r) {
-    var ph = String(r[R_PHONE]||"").trim();
-    if (!ph) return;
-    parPhone[ph] = r; // écrase → garde la plus récente
+  todayRows.forEach(function(r){
+    var ph=String(r[R_PHONE]||"").trim();
+    if(ph) parPhone[ph]=r;
   });
 
-  var vendorsUniques    = Object.keys(parPhone).length;
-  var nbDeclarations    = todayRows.length; // toutes les lignes du jour
-  var ventesAujourdHui  = 0;
-  var xtraAujourdHui    = 0;
-  var chocoAujourdHui   = 0;
-  var vanAujourdHui     = 0;
-  var aucunPb           = 0;
-  var vendorsQuiVendent = 0;
+  var vendorsUniques=Object.keys(parPhone).length;
+  var ventes=0,xtra=0,choco=0,van=0,aucunPb=0,vendorsQuiVendent=0;
 
-  Object.values(parPhone).forEach(function(r) {
-    var stat = String(r[R_STATUT]||"").trim();
-    var cat  = String(r[R_CAT]   ||"").trim();
-
-    // Compter satisfaction
-    if (cat === "Aucun probleme" || cat === "") aucunPb++;
-
-    // Ventes TODAY = seulement ceux qui ont DÉJÀ vendu aujourd'hui
-    if (stat === "J ai deja vendu") {
-      ventesAujourdHui += parseInt(r[R_VENTES])||0;
-      xtraAujourdHui   += parseInt(r[R_XTRA])  ||0;
-      chocoAujourdHui  += parseInt(r[R_CHOCO]) ||0;
-      vanAujourdHui    += parseInt(r[R_VAN])   ||0;
+  Object.values(parPhone).forEach(function(r){
+    var stat=String(r[R_STATUT]||"").trim();
+    var cat =String(r[R_CAT]   ||"").trim();
+    if(cat==="Aucun probleme"||cat==="") aucunPb++;
+    // ✅ Ventes d'aujourd'hui = seulement "J ai deja vendu"
+    if(isVenteAujourdHui(stat)){
+      ventes+=parseInt(r[R_VENTES])||0;
+      xtra  +=parseInt(r[R_XTRA])  ||0;
+      choco +=parseInt(r[R_CHOCO]) ||0;
+      van   +=parseInt(r[R_VAN])   ||0;
       vendorsQuiVendent++;
     }
   });
 
-  var satisfToday = vendorsUniques > 0
-    ? Math.round((aucunPb/vendorsUniques)*100) : 0;
-
-  // Live feed — 10 dernières lignes du jour, plus récentes en premier
-  var last10 = todayRows.slice(-10).reverse().map(function(r){
+  var last10=todayRows.slice(-10).reverse().map(function(r){
+    var stat=String(r[R_STATUT]||"").trim();
     return {
-      heure  :String(r[R_HEURE] ||""),
-      nom    :String(r[R_NOM]   ||""),
-      depot  :String(r[R_DEPOT] ||""),
-      statut :String(r[R_STATUT]||""),
-      ventes :parseInt(r[R_VENTES])||0,
-      xtra   :parseInt(r[R_XTRA])  ||0,
-      choco  :parseInt(r[R_CHOCO]) ||0,
-      van    :parseInt(r[R_VAN])   ||0,
-      cat    :String(r[R_CAT]   ||""),
+      heure :String(r[R_HEURE] ||""),
+      nom   :String(r[R_NOM]   ||""),
+      depot :String(r[R_DEPOT] ||""),
+      statut:stat,
+      ventes:parseInt(r[R_VENTES])||0,
+      xtra  :parseInt(r[R_XTRA])  ||0,
+      choco :parseInt(r[R_CHOCO]) ||0,
+      van   :parseInt(r[R_VAN])   ||0,
+      cat   :String(r[R_CAT]   ||""),
+      periode_ventes: isVenteAujourdHui(stat) ? "today" : "yesterday",
     };
   });
 
   return {
-    nb_declarations      : nbDeclarations,    // toutes les interactions du jour
-    vendors_uniques      : vendorsUniques,    // ← nombre RÉEL de vendors distincts
-    vendors_qui_vendent  : vendorsQuiVendent, // ceux qui ont déclaré des ventes aujourd'hui
-    ventes_total         : ventesAujourdHui,  // ventes du JOUR uniquement
-    fanxtra_total        : xtraAujourdHui,
-    fanchoco_total       : chocoAujourdHui,
-    fanvan_total         : vanAujourdHui,
-    satisfaction_today   : satisfToday,
-    last_declarations    : last10,
+    nb_declarations    : todayRows.length,
+    vendors_uniques    : vendorsUniques,
+    vendors_qui_vendent: vendorsQuiVendent,
+    ventes_total       : ventes,
+    fanxtra_total      : xtra,
+    fanchoco_total     : choco,
+    fanvan_total       : van,
+    satisfaction_today : vendorsUniques>0?Math.round((aucunPb/vendorsUniques)*100):0,
+    last_declarations  : last10,
   };
 }
 
 
 // ============================================================
-//  DEPOTS — depuis Réponses (toutes les déclarations)
-//  + calcul CA réel (seulement "J ai deja vendu")
+//  YESTERDAY — ventes déclarées comme "veille"
+//  = lignes d'HIER avec "Je vais vendre"/"Non"
+//  + lignes d'AUJOURD'HUI avec "Je vais vendre"/"Non"
+//  (les deux représentent les ventes de la veille)
 // ============================================================
-function buildDepots(rows) {
-  var m = {};
-  rows.forEach(function(r) {
-    var dep  = String(r[R_DEPOT] ||"").trim();
-    var stat = String(r[R_STATUT]||"").trim();
-    if (!dep) return;
-    if (!m[dep]) m[dep] = {nom:dep, declarations:0, vendors:new Set(),
-      ventes:0, fx:0, fc:0, fv:0};
-    m[dep].declarations++;
-    var ph = String(r[R_PHONE]||"").trim();
-    if (ph) m[dep].vendors.add(ph);
-    // Compter ventes seulement quand "J ai deja vendu"
-    if (stat === "J ai deja vendu") {
-      m[dep].ventes += parseInt(r[R_VENTES])||0;
-      m[dep].fx     += parseInt(r[R_XTRA])  ||0;
-      m[dep].fc     += parseInt(r[R_CHOCO]) ||0;
-      m[dep].fv     += parseInt(r[R_VAN])   ||0;
+function buildYesterday(rows, today, yesterday) {
+  var ventes=0,xtra=0,choco=0,van=0,count=0;
+
+  rows.forEach(function(r){
+    var date=String(r[R_DATE]||"").trim();
+    var stat=String(r[R_STATUT]||"").trim();
+
+    // Lignes d'aujourd'hui avec statut "veille"
+    var estAujourdHuiVeille = (date===today && isVenteHier(stat));
+    // Lignes d'hier avec statut "veille" OU "deja vendu"
+    // (hier soir "j ai deja vendu" = ventes d'hier aussi)
+    var estHierDirect = (date===yesterday);
+
+    if (estAujourdHuiVeille || estHierDirect) {
+      ventes+=parseInt(r[R_VENTES])||0;
+      xtra  +=parseInt(r[R_XTRA])  ||0;
+      choco +=parseInt(r[R_CHOCO]) ||0;
+      van   +=parseInt(r[R_VAN])   ||0;
+      count++;
     }
   });
-  return Object.values(m).map(function(d){
-    return {
-      nom:d.nom, declarations:d.declarations,
-      nb_vendors:d.vendors.size, ventes:d.ventes,
-      fanxtra:d.fx, fanchoco:d.fc, fanvan:d.fv,
-      pieces:d.fx+d.fc+d.fv,
-    };
-  }).sort(function(a,b){return b.ventes-a.ventes;});
+
+  return {
+    date:yesterday, nb_declarations:count,
+    ventes_total:ventes, fanxtra_total:xtra,
+    fanchoco_total:choco, fanvan_total:van,
+  };
 }
 
 
 // ============================================================
-//  DEPOT TODAY — performances du jour par dépôt
+//  DEPOTS MTD — CA réel (seulement "J ai deja vendu")
 // ============================================================
-function buildDepotToday(rows, today) {
-  var todayRows = rows.filter(function(r){
-    return String(r[R_DATE]||"").trim()===today;
-  });
-  var m = {};
-  todayRows.forEach(function(r) {
-    var dep  = String(r[R_DEPOT] ||"").trim();
-    var stat = String(r[R_STATUT]||"").trim();
-    if (!dep) return;
-    if (!m[dep]) m[dep]={nom:dep,declarations:0,vendors:new Set(),ventes:0,fx:0,fc:0,fv:0};
+function buildDepots(rows) {
+  var m={};
+  rows.forEach(function(r){
+    var dep =String(r[R_DEPOT] ||"").trim();
+    var stat=String(r[R_STATUT]||"").trim();
+    if(!dep) return;
+    if(!m[dep]) m[dep]={nom:dep,declarations:0,vendors:new Set(),ventes:0,fx:0,fc:0,fv:0};
     m[dep].declarations++;
     var ph=String(r[R_PHONE]||"").trim(); if(ph) m[dep].vendors.add(ph);
-    if (stat==="J ai deja vendu") {
+    if(isVenteAujourdHui(stat)){
       m[dep].ventes+=parseInt(r[R_VENTES])||0;
       m[dep].fx    +=parseInt(r[R_XTRA])  ||0;
       m[dep].fc    +=parseInt(r[R_CHOCO]) ||0;
@@ -257,70 +244,68 @@ function buildDepotToday(rows, today) {
     }
   });
   return Object.values(m).map(function(d){
-    return {nom:d.nom,declarations:d.declarations,nb_vendors:d.vendors.size,
+    return{nom:d.nom,declarations:d.declarations,nb_vendors:d.vendors.size,
       ventes:d.ventes,fanxtra:d.fx,fanchoco:d.fc,fanvan:d.fv,pieces:d.fx+d.fc+d.fv};
   }).sort(function(a,b){return b.ventes-a.ventes;});
 }
 
 
 // ============================================================
-//  SATISFACTION
+//  DEPOT PAR JOUR (today ou yesterday)
 // ============================================================
-function buildSatisfaction(rows, today) {
-  var parts=today.split("/"), mois=parseInt(parts[1]), annee=parseInt(parts[2]);
-  var total=0, aucun=0;
-  // Par vendor unique par jour (pas par ligne)
-  var parJourPhone = {};
-  rows.forEach(function(r) {
-    var dp=String(r[R_DATE]||"").split("/");
-    if(dp.length<3||parseInt(dp[1])!==mois||parseInt(dp[2])!==annee) return;
-    var ph=String(r[R_PHONE]||"").trim(); if(!ph) return;
-    var key=dp[0]+"-"+ph;
-    parJourPhone[key]={cat:String(r[R_CAT]||"").trim()};
-  });
-  Object.values(parJourPhone).forEach(function(v){
-    total++;
-    if(v.cat==="Aucun probleme"||v.cat==="") aucun++;
-  });
-  return {rate:total>0?Math.round((aucun/total)*100):0, aucun_probleme:aucun, total_decla:total};
-}
+function buildDepotByDay(rows, today, which) {
+  var yesterday = getYesterday(today);
+  var m={};
 
-
-// ============================================================
-//  EQUIPMENT
-// ============================================================
-function buildEquipment(rows, today) {
-  var parts=today.split("/"), mois=parseInt(parts[1]), annee=parseInt(parts[2]);
-  var issues=0;
   rows.forEach(function(r){
-    var cat=String(r[R_CAT]||"").trim();
-    if(cat!=="Probleme d equipement") return;
-    var dp=String(r[R_DATE]||"").split("/");
-    if(dp.length<3||parseInt(dp[1])!==mois||parseInt(dp[2])!==annee) return;
-    issues++;
+    var date=String(r[R_DATE]||"").trim();
+    var stat=String(r[R_STATUT]||"").trim();
+    var dep =String(r[R_DEPOT]||"").trim();
+    if(!dep) return;
+
+    var inclure = false;
+    if(which==="today"){
+      // Ventes d'aujourd'hui = lignes du jour avec "J ai deja vendu"
+      inclure = (date===today && isVenteAujourdHui(stat));
+    } else {
+      // Ventes d'hier = lignes du jour avec "Je vais vendre"/"Non"
+      //              + toutes les lignes d'hier
+      inclure = (date===today && isVenteHier(stat)) || (date===yesterday);
+    }
+    if(!inclure) return;
+
+    if(!m[dep]) m[dep]={nom:dep,declarations:0,vendors:new Set(),ventes:0,fx:0,fc:0,fv:0};
+    m[dep].declarations++;
+    var ph=String(r[R_PHONE]||"").trim(); if(ph) m[dep].vendors.add(ph);
+    m[dep].ventes+=parseInt(r[R_VENTES])||0;
+    m[dep].fx    +=parseInt(r[R_XTRA])  ||0;
+    m[dep].fc    +=parseInt(r[R_CHOCO]) ||0;
+    m[dep].fv    +=parseInt(r[R_VAN])   ||0;
   });
-  return {issues_mois:issues,jours_perdus:0,semaines:0,heures:0,
-    statut:issues===0?"OK":"ALERTE"};
+
+  return Object.values(m).map(function(d){
+    return{nom:d.nom,declarations:d.declarations,nb_vendors:d.vendors.size,
+      ventes:d.ventes,fanxtra:d.fx,fanchoco:d.fc,fanvan:d.fv,pieces:d.fx+d.fc+d.fv};
+  }).sort(function(a,b){return b.ventes-a.ventes;});
 }
 
 
 // ============================================================
-//  WEEKLY QPVD
+//  WEEKLY QPVD — basé sur "J ai deja vendu" uniquement
 // ============================================================
 function buildWeekly(rows) {
   var bySem={};
   rows.forEach(function(r){
-    var ds=String(r[R_DATE]||"").trim(); if(!ds) return;
+    var ds  =String(r[R_DATE]||"").trim(); if(!ds) return;
+    var stat=String(r[R_STATUT]||"").trim();
     var p=ds.split("/"); if(p.length<3) return;
     var d=new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
     var key=getWeekKey(d);
     if(!bySem[key]) bySem[key]={pieces:0,days:{},key:key};
-    // Compter pièces seulement pour "J ai deja vendu"
-    var stat=String(r[R_STATUT]||"").trim();
-    if(stat==="J ai deja vendu") {
+    // Pièces = seulement ventes confirmées du jour
+    if(isVenteAujourdHui(stat)){
       bySem[key].pieces+=(parseInt(r[R_XTRA])||0)+(parseInt(r[R_CHOCO])||0)+(parseInt(r[R_VAN])||0);
     }
-    // Jours uniques par vendor
     bySem[key].days[String(r[R_PHONE]||"")+"_"+ds]=true;
   });
   var keys=Object.keys(bySem).sort().slice(-7);
@@ -337,9 +322,47 @@ function getWeekKey(d){
 
 
 // ============================================================
+//  SATISFACTION — par vendor-day unique
+// ============================================================
+function buildSatisfaction(rows, today) {
+  var p=today.split("/"),mois=parseInt(p[1]),annee=parseInt(p[2]);
+  var parJourPhone={};
+  rows.forEach(function(r){
+    var dp=String(r[R_DATE]||"").split("/");
+    if(dp.length<3||parseInt(dp[1])!==mois||parseInt(dp[2])!==annee) return;
+    var ph=String(r[R_PHONE]||"").trim(); if(!ph) return;
+    var key=dp[0]+"-"+ph;
+    parJourPhone[key]={cat:String(r[R_CAT]||"").trim()};
+  });
+  var total=0,aucun=0;
+  Object.values(parJourPhone).forEach(function(v){
+    total++;
+    if(v.cat==="Aucun probleme"||v.cat==="") aucun++;
+  });
+  return{rate:total>0?Math.round((aucun/total)*100):0,aucun_probleme:aucun,total_decla:total};
+}
+
+
+// ============================================================
+//  EQUIPMENT
+// ============================================================
+function buildEquipment(rows, today) {
+  var p=today.split("/"),mois=parseInt(p[1]),annee=parseInt(p[2]),issues=0;
+  rows.forEach(function(r){
+    if(String(r[R_CAT]||"").trim()!=="Probleme d equipement") return;
+    var dp=String(r[R_DATE]||"").split("/");
+    if(dp.length<3||parseInt(dp[1])!==mois||parseInt(dp[2])!==annee) return;
+    issues++;
+  });
+  return{issues_mois:issues,jours_perdus:0,semaines:0,heures:0,
+    statut:issues===0?"OK":"ALERTE"};
+}
+
+
+// ============================================================
 //  PROBLEMS, PRIME, HOTSPOTS, MORNING/EVENING
 // ============================================================
-function buildProblems(rows, today) {
+function buildProblems(rows,today){
   var p=today.split("/"),mois=parseInt(p[1]),annee=parseInt(p[2]),m={};
   rows.forEach(function(r){
     var cat=String(r[R_CAT]||"").trim();
@@ -351,7 +374,6 @@ function buildProblems(rows, today) {
   return Object.entries(m).map(function(e){return{categorie:e[0],count:e[1]};})
     .sort(function(a,b){return b.count-a.count;});
 }
-
 function buildPrime(rows){
   var m={};
   rows.forEach(function(r){
@@ -361,7 +383,6 @@ function buildPrime(rows){
   return Object.entries(m).map(function(e){return{pilier:e[0],count:e[1]};})
     .sort(function(a,b){return b.count-a.count;});
 }
-
 function buildHotspots(rows){
   var m={};
   rows.forEach(function(r){
@@ -371,7 +392,6 @@ function buildHotspots(rows){
   return Object.entries(m).map(function(e){return{lieu:e[0],count:e[1]};})
     .sort(function(a,b){return b.count-a.count;}).slice(0,10);
 }
-
 function buildMorningEvening(rows){
   var mt={declarations:0,ventes:0},so={declarations:0,ventes:0};
   rows.forEach(function(r){
@@ -390,7 +410,7 @@ function buildMorningEvening(rows){
 
 
 // ============================================================
-//  RÉCONCILIATION
+//  RÉCONCILIATION Réponses → Vendors
 // ============================================================
 function reconcilierVendors(){
   try{
@@ -398,29 +418,25 @@ function reconcilierVendors(){
     var sv=ss.getSheetByName(SHEET_VENDORS),sr=ss.getSheetByName(SHEET_REPONSES);
     if(!sv||!sr){Logger.log("Onglet introuvable");return;}
     var rv=sv.getDataRange().getValues(),ph={};
-    for(var i=1;i<rv.length;i++){var p=String(rv[i][V_PHONE]||"").trim();if(p)ph[p]=i+1;}
+    for(var i=1;i<rv.length;i++){var p2=String(rv[i][V_PHONE]||"").trim();if(p2)ph[p2]=i+1;}
     var rr=sr.getDataRange().getValues(),last={};
     for(var j=1;j<rr.length;j++){
-      var r=rr[j],p2=String(r[R_PHONE]||"").trim();if(!p2)continue;
-      last[p2]={nom:String(r[R_NOM]||"").trim(),depot:String(r[R_DEPOT]||"").trim(),
+      var r=rr[j],p3=String(r[R_PHONE]||"").trim();if(!p3)continue;
+      last[p3]={nom:String(r[R_NOM]||"").trim(),depot:String(r[R_DEPOT]||"").trim(),
         date:String(r[R_DATE]||"").trim(),ventes:parseInt(r[R_VENTES])||0,
         fx:parseInt(r[R_XTRA])||0,fc:parseInt(r[R_CHOCO])||0,fv:parseInt(r[R_VAN])||0};
     }
     var now=Utilities.formatDate(new Date(),TIMEZONE,"dd/MM/yyyy HH:mm"),a=0,m=0;
-    Object.keys(last).forEach(function(p){
-      var info=last[p];if(!info.nom||!info.depot)return;
+    Object.keys(last).forEach(function(p4){
+      var info=last[p4];if(!info.nom||!info.depot)return;
       var pc=info.fx+info.fc+info.fv;
-      if(!ph[p]){sv.appendRow([p,info.nom,info.depot,now,info.ventes,info.fx,info.fc,info.fv,pc,info.date]);a++;}
-      else if(info.ventes>0||pc>0){sv.getRange(ph[p],V_LAST_DEC+1,1,7).setValues([[now,info.ventes,info.fx,info.fc,info.fv,pc,info.date]]);m++;}
+      if(!ph[p4]){sv.appendRow([p4,info.nom,info.depot,now,info.ventes,info.fx,info.fc,info.fv,pc,info.date]);a++;}
+      else if(info.ventes>0||pc>0){sv.getRange(ph[p4],V_LAST_DEC+1,1,7).setValues([[now,info.ventes,info.fx,info.fc,info.fv,pc,info.date]]);m++;}
     });
-    Logger.log("Synchro OK : "+a+" ajoutés, "+m+" mis à jour");
+    Logger.log("Synchro OK: "+a+" ajoutés, "+m+" mis à jour");
   }catch(e){Logger.log("Erreur: "+e.message);}
 }
 
-
-// ============================================================
-//  MENU & DÉCLENCHEUR
-// ============================================================
 function onOpen(){
   try{
     SpreadsheetApp.getUi().createMenu("FanMilk Dashboard")
@@ -437,10 +453,11 @@ function testerAPI(){
     SpreadsheetApp.getUi().alert(
       "✅ API OK\n\n"+
       "📅 Aujourd'hui : "+d.today_date+"\n"+
-      "👤 Vendors actifs : "+d.vendors.length+"\n"+
-      "💬 Déclarations aujourd'hui : "+d.today.nb_declarations+"\n"+
-      "👥 Vendors UNIQUES aujourd'hui : "+d.today.vendors_uniques+"\n"+
-      "💰 Ventes du JOUR (déjà vendus) : "+d.today.ventes_total+" FCFA\n"+
+      "👥 Vendors uniques aujourd'hui : "+d.today.vendors_uniques+"\n"+
+      "💬 Interactions totales : "+d.today.nb_declarations+"\n"+
+      "✅ Déjà vendu aujourd'hui : "+d.today.vendors_qui_vendent+" vendors\n"+
+      "💰 Ventes AUJOURD'HUI : "+d.today.ventes_total+" FCFA\n"+
+      "📦 Ventes HIER (reportées) : "+d.yesterday.ventes_total+" FCFA\n"+
       "⭐ Satisfaction : "+d.satisfaction.rate+"%\n\n"+
       "🔗 https://fanmilk-dashboard.vercel.app/"
     );

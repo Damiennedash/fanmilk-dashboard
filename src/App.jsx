@@ -531,19 +531,38 @@ export default function App() {
 
         {/* ══ TODAY ══ */}
         {tab==="today"&&(<>
-          {/* Note explicative */}
-          <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,
-            padding:"10px 14px",fontSize:12,color:C.blue}}>
-            💡 <strong>Sales today</strong> = only vendors who declared <em>"J'ai déjà vendu"</em> today.<br/>
-            Vendors who said <em>"Je vais vendre"</em> this morning → their figures count as <strong>yesterday's sales</strong>.
+          {/* Règle ventes */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 12px"}}>
+              <div style={{fontWeight:700,fontSize:12,color:C.green,marginBottom:4}}>✅ Today's Sales</div>
+              <div style={{fontSize:11,color:"#166534"}}>"J'ai déjà vendu" → figures = <strong>TODAY</strong></div>
+            </div>
+            <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px"}}>
+              <div style={{fontWeight:700,fontSize:12,color:C.blue,marginBottom:4}}>📅 Yesterday's Sales</div>
+              <div style={{fontSize:11,color:"#1e40af"}}>"Je vais vendre" / "Non" → figures = <strong>YESTERDAY</strong></div>
+            </div>
           </div>
 
+          {/* KPIs today */}
           <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
-            <KpiCard label="Total Interactions" value={today.nb_declarations??0}      sub="All WhatsApp messages"  accent={C.blue}   icon="💬"/>
-            <KpiCard label="Unique Vendors"      value={today.vendors_uniques??0}      sub="Distinct vendors today" accent={C.teal}   icon="👤"/>
-            <KpiCard label="Already Sold"        value={today.vendors_qui_vendent??0}  sub="Declared sales today"   accent={C.green}  icon="✅"/>
-            <KpiCard label="Today's Sales"       value={`${fmt(today.ventes_total??0)} FCFA`} sub="Confirmed sales only" accent={C.green} icon="💰"/>
+            <KpiCard label="Unique Vendors"      value={today.vendors_uniques??0}      sub={`${today.nb_declarations??0} total interactions`} accent={C.teal}   icon="👤"/>
+            <KpiCard label="Already Sold Today"  value={today.vendors_qui_vendent??0}  sub="Confirmed sales today"   accent={C.green}  icon="✅"/>
+            <KpiCard label="Sales TODAY"         value={`${fmt(today.ventes_total??0)} FCFA`} sub="'J ai deja vendu' only" accent={C.green} icon="💰"/>
+            <KpiCard label="Today's Satisf."    value={`${today.satisfaction_today??0}%`} sub="Today only" accent={(today.satisfaction_today??0)>=70?C.green:C.red} icon="⭐"/>
           </div>
+
+          {/* Ventes d'hier reportées */}
+          {data?.yesterday&&(
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 12px"}}>
+              <H>📅 Yesterday's Sales (reported this morning)</H>
+              <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+                <KpiCard label="Sales Yesterday" value={`${fmt(data.yesterday.ventes_total??0)} FCFA`} sub={data.yesterday.date} accent={C.blue} icon="💰"/>
+                <KpiCard label="FanXtra"  value={data.yesterday.fanxtra_total??0}  sub="units" accent={C.blue}   icon="🍦"/>
+                <KpiCard label="FanChoco" value={data.yesterday.fanchoco_total??0} sub="units" accent={C.purple} icon="🍦"/>
+                <KpiCard label="FanVan."  value={data.yesterday.fanvan_total??0}   sub="units" accent={C.orange} icon="🍦"/>
+              </div>
+            </div>
+          )}
 
           {/* SKU today */}
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 12px"}}>
