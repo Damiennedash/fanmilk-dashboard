@@ -99,10 +99,15 @@ function buildData() {
   // Lignes du mois en cours
   var monthRows = validRows.filter(function(r) {
     var ds = toDateStr(r[R_DATE]);
+    if (!ds || ds.length < 8) return false;
     var parts = ds.split("/");
     if (parts.length < 3) return false;
-    return (parts[1] + "/" + parts[2]) === month;
+    // Comparer mois et année
+    var mm = parts[1].length === 1 ? "0"+parts[1] : parts[1];
+    var yyyy = parts[2];
+    return (mm + "/" + yyyy) === month;
   });
+  Logger.log("monthRows: " + monthRows.length + " lignes pour " + month);
 
   // Lignes d'aujourd'hui
   var todayRows = validRows.filter(function(r) {
@@ -182,6 +187,7 @@ function buildOverview(monthRows, todayRows, todaySales, venRows, yesterday) {
   var totalJours = 0, nbV = Object.keys(joursParVendor).length;
   Object.values(joursParVendor).forEach(function(s){ totalJours += s.size; });
   var avgJours = nbV > 0 ? Math.round(totalJours / nbV) : 0;
+  Logger.log("Jours: nbVendors=" + nbV + " totalJours=" + totalJours + " avg=" + avgJours);
 
   // ── AUJOURD'HUI ──────────────────────────────────────────
   // Ventes = seulement "J ai deja vendu"
