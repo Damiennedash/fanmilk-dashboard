@@ -6,7 +6,7 @@
 var SHEET_ID       = "1SxJcVdSTWfeG_v6ey9gCSKgqSgqhKlbbcbp5cLZEnn4";
 var SHEET_VENDORS  = "Vendors";
 var SHEET_REPONSES = "Réponses Vendors";
-var TIMEZONE       = "Africa/Lome";
+var TIMEZONE       = "Africa/Abidjan"; // GMT+0 — même fuseau que Togo (Africa/Lome parfois buggé)
 
 // Colonnes Reponses Vendors (A=0)
 var R_DATE=0, R_HEURE=1, R_PERIODE=2, R_PHONE=3, R_NOM=4, R_DEPOT=5;
@@ -87,8 +87,9 @@ function buildData() {
   var ss      = SpreadsheetApp.openById(SHEET_ID);
   var repRows = readSheet(ss, SHEET_REPONSES);
   var venRows = readSheet(ss, SHEET_VENDORS);
-  var today   = todayStr();
-  var month   = thisMonth();
+  var today     = todayStr();
+  var yesterday = yesterdayStr();
+  var month     = thisMonth();
 
   // Filtrer les lignes valides (avec date et téléphone)
   var validRows = repRows.filter(function(r) {
@@ -116,12 +117,13 @@ function buildData() {
   return {
     updated_at         : new Date().toISOString(),
     today_date         : today,
-    overview           : buildOverview(monthRows, todayRows, todaySales, venRows),
+    overview           : buildOverview(monthRows, todayRows, todaySales, venRows, yesterday),
     today              : buildToday(todayRows, todaySales),
     vendors            : buildVendors(venRows, validRows),
     depots             : buildDepots(monthRows),
     depot_today        : buildDepotToday(todaySales),
     depot_yesterday    : buildDepotYesterday(validRows, today, yesterday),
+    yesterday_sales    : buildYesterdaySales(validRows, today, yesterday),
     weekly             : buildWeekly(validRows),
     hotspots           : buildHotspots(monthRows),
     morning_vs_evening : buildMorningEvening(monthRows),
@@ -142,7 +144,7 @@ function buildData() {
 //  - Ventes du jour (J ai deja vendu uniquement)
 //  - Problème équipement aujourd'hui (0 ou >0)
 // ============================================================
-function buildOverview(monthRows, todayRows, todaySales, venRows) {
+function buildOverview(monthRows, todayRows, todaySales, venRows, yesterday) {
   // ── MTD ──────────────────────────────────────────────────
   var totalVentesMTD = 0, totalXtraMTD = 0, totalChocoMTD = 0, totalVanMTD = 0;
   var vendorsActifs  = new Set();
@@ -363,6 +365,40 @@ function buildDepotToday(todaySales) {
       nb_vendors:d.vendors.size, ventes:d.ventes,
       fanxtra:d.fx, fanchoco:d.fc, fanvan:d.fv, pieces:d.fx+d.fc+d.fv};
   }).sort(function(a,b){ return b.ventes-a.ventes; });
+}
+
+
+// ============================================================
+//  VENTES D'HIER
+//  = lignes d'aujourd'hui avec "Je vais vendre" ou "Non"
+//  + toutes les lignes d'hier
+// ============================================================
+function buildYesterdaySales(validRows, today, yesterday) {
+  var ventes=0, xtra=0, choco=0, van=0, count=0;
+  var vendors = new Set();
+  validRows.forEach(function(r) {
+    var ds   = toDateStr(r[R_DATE]);
+    var stat = String(r[R_STATUT]||"").trim();
+    var inclure = (ds===today && (stat==="Je vais vendre" || stat==="Non"))
+               || (ds===yesterday);
+    if (!inclure) return;
+    ventes += parseInt(r[R_VENTES])||0;
+    xtra   += parseInt(r[R_XTRA])  ||0;
+    choco  += parseInt(r[R_CHOCO]) ||0;
+    van    += parseInt(r[R_VAN])   ||0;
+    count++;
+    var ph = String(r[R_PHONE]||"").trim();
+    if (ph) vendors.add(ph);
+  });
+  return {
+    date        : yesterday,
+    nb          : count,
+    nb_vendors  : vendors.size,
+    ventes      : ventes,
+    xtra        : xtra,
+    choco       : choco,
+    van         : van,
+  };
 }
 
 

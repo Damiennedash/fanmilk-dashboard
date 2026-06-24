@@ -165,7 +165,7 @@ export default function App() {
   const equipment   = data?.equipment??{issues_mois:0,issues_today:0,jours_perdus:0,semaines:0,heures:0};
   const hotspots    = data?.hotspots??[];
   const problems    = data?.problems??[];
-  const yest        = data?.yesterday_sales??{ventes:0,xtra:0,choco:0,van:0,nb:0,date:""};
+  const yest        = data?.yesterday_sales ?? data?.yesterday ?? {ventes:0,xtra:0,choco:0,van:0,nb:0,date:""};
   const mve         = data?.morning_vs_evening??{};
 
   const ranked      = [...vendors].sort((a,b)=>b.ventes-a.ventes);
@@ -491,13 +491,13 @@ export default function App() {
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 12px"}}>
             <H>🏆 Vendor League — MTD Sales</H>
             <ResponsiveContainer width="100%" height={ranked.length*52+40}>
-              <BarChart data={ranked.map(v=>({nom:v.nom.split(" ")[0],"Sales k":Math.round(v.ventes/1000),"Units":v.fanxtra+v.fanchoco+v.fanvanille}))} layout="vertical" margin={{left:0,right:10}}>
+              <BarChart data={ranked.map(v=>({nom:v.nom.split(" ")[0],"Sales k":Math.round(v.ventes/1000),"Units":v.fanxtra+v.fanchoco+v.fanvanille}))} layout="vertical" margin={{left:0,right:40}}>
                 <XAxis type="number" tick={{fontSize:10}}/>
                 <YAxis type="category" dataKey="nom" tick={{fontSize:11}} width={55}/>
                 <Tooltip/>
                 <Legend wrapperStyle={{fontSize:11}}/>
-                <Bar dataKey="Sales k" fill={C.blueL} radius={[0,4,4,0]}/>
-                <Bar dataKey="Units"   fill={C.teal}  radius={[0,4,4,0]}/>
+                <Bar dataKey="Sales k" fill={C.blueL} radius={[0,4,4,0]} label={{position:"right",fontSize:9,fill:C.blue,formatter:function(v){return v+"k"}}}/>
+                <Bar dataKey="Units"   fill={C.teal}  radius={[0,4,4,0]} label={{position:"right",fontSize:9,fill:C.teal}}/>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -640,8 +640,8 @@ export default function App() {
           <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
             <KpiCard label="Sales Yesterday"  value={`${fmt(yest.ventes??0)} FCFA`}
               sub={yest.date||"—"} accent={C.blue} icon="💰"/>
-            <KpiCard label="Declarations"     value={yest.nb??0}
-              sub="Reported yesterday's sales" accent={C.teal} icon="💬"/>
+            <KpiCard label="Vendors"          value={yest.nb_vendors??0}
+              sub={`${yest.nb??0} declarations`} accent={C.teal} icon="👤"/>
             <KpiCard label="FanXtra"          value={yest.xtra??0}
               sub="units" accent={C.blue} icon="🍦"/>
             <KpiCard label="FanChoco"         value={yest.choco??0}
