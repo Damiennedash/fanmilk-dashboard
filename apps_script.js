@@ -175,19 +175,26 @@ function buildOverview(monthRows, todayRows, todaySales, venRows, yesterday) {
   var qpvd = nbVendorDays > 0
     ? Math.round(totalPiecesMTD / nbVendorDays) : 0;
 
-  // Jours travaillés moyens
+  // Jours travaillés moyens — calculé depuis TOUTES les lignes valides
+  // en filtrant par mois directement dans la boucle
   var joursParVendor = {};
-  monthRows.forEach(function(r) {
+  validRows.forEach(function(r) {
     var ph = String(r[R_PHONE]||"").trim();
     var ds = toDateStr(r[R_DATE]);
     if (!ph || !ds) return;
+    var parts = ds.split("/");
+    if (parts.length < 3) return;
+    // Filtrer par mois courant
+    var mm   = parts[1].length===1 ? "0"+parts[1] : parts[1];
+    var yyyy = parts[2];
+    if ((mm+"/"+yyyy) !== month) return;
     if (!joursParVendor[ph]) joursParVendor[ph] = new Set();
     joursParVendor[ph].add(ds);
   });
   var totalJours = 0, nbV = Object.keys(joursParVendor).length;
   Object.values(joursParVendor).forEach(function(s){ totalJours += s.size; });
   var avgJours = nbV > 0 ? Math.round(totalJours / nbV) : 0;
-  Logger.log("Jours: nbVendors=" + nbV + " totalJours=" + totalJours + " avg=" + avgJours);
+  Logger.log("Jours: nbVendors=" + nbV + " totalJours=" + totalJours + " avg=" + avgJours + " month=" + month);
 
   // ── AUJOURD'HUI ──────────────────────────────────────────
   // Ventes = seulement "J ai deja vendu"
