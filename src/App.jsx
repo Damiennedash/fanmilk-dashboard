@@ -165,6 +165,7 @@ export default function App() {
   const equipment   = data?.equipment??{issues_mois:0,issues_today:0,jours_perdus:0,semaines:0,heures:0};
   const hotspots    = data?.hotspots??[];
   const problems    = data?.problems??[];
+  const yest        = data?.yesterday_sales??{ventes:0,xtra:0,choco:0,van:0,nb:0,date:""};
   const mve         = data?.morning_vs_evening??{};
 
   const ranked      = [...vendors].sort((a,b)=>b.ventes-a.ventes);
@@ -211,6 +212,7 @@ export default function App() {
     {id:"depots",      label:"🏪 Depots"},
     {id:"vendors",     label:"🏆 Vendors"},
     {id:"today",       label:"⚡ Today"},
+    {id:"yesterday",   label:"📅 Yesterday"},
     {id:"performance", label:"🎯 Perf."},
   ];
 
@@ -622,6 +624,86 @@ export default function App() {
               );
             })}
           </div>
+        </>)}
+
+        {/* ══ YESTERDAY ══ */}
+        {tab==="yesterday"&&(<>
+          {/* Note */}
+          <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,
+            padding:"10px 14px",fontSize:12,color:C.blue}}>
+            📅 <strong>Yesterday's sales</strong> = all vendors who declared
+            <em> "Je vais vendre"</em> or <em>"Je ne vends pas"</em> today
+            (their figures = yesterday's sales) + all declarations from yesterday.
+          </div>
+
+          {/* KPIs hier */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+            <KpiCard label="Sales Yesterday"  value={`${fmt(yest.ventes??0)} FCFA`}
+              sub={yest.date||"—"} accent={C.blue} icon="💰"/>
+            <KpiCard label="Declarations"     value={yest.nb??0}
+              sub="Reported yesterday's sales" accent={C.teal} icon="💬"/>
+            <KpiCard label="FanXtra"          value={yest.xtra??0}
+              sub="units" accent={C.blue} icon="🍦"/>
+            <KpiCard label="FanChoco"         value={yest.choco??0}
+              sub="units" accent={C.purple} icon="🍦"/>
+          </div>
+
+          <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+            <KpiCard label="FanVanille"       value={yest.van??0}
+              sub="units" accent={C.orange} icon="🍦"/>
+            <KpiCard label="Total Units"      value={(yest.xtra??0)+(yest.choco??0)+(yest.van??0)}
+              sub="All SKUs yesterday" accent={C.purple} icon="📦"/>
+          </div>
+
+          {/* SKU split hier */}
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 12px"}}>
+            <H>🍦 Yesterday's SKU Breakdown</H>
+            {(()=>{
+              const tot=(yest.xtra??0)+(yest.choco??0)+(yest.van??0);
+              return [
+                {label:"FanXtra",   val:yest.xtra??0,  color:C.blue},
+                {label:"FanChoco",  val:yest.choco??0, color:C.purple},
+                {label:"FanVanille",val:yest.van??0,   color:C.orange},
+              ].map(({label,val,color})=>(
+                <div key={label} style={{marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",
+                    fontSize:12,fontWeight:700,color}}>
+                    <span>{label}</span>
+                    <span>{val} units · {pct(val,tot||1)}%</span>
+                  </div>
+                  <Bar2 value={val} max={tot||1} color={color}/>
+                </div>
+              ));
+            })()}
+          </div>
+
+          {/* Dépôts hier */}
+          {(data?.depot_yesterday??[]).length>0&&(
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 12px"}}>
+              <H>🏪 Yesterday by Depot</H>
+              {(data?.depot_yesterday??[]).map((d,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",
+                  alignItems:"center",padding:"10px 0",
+                  borderBottom:i<(data.depot_yesterday.length-1)?`1px solid ${C.border}`:"none"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",
+                      background:["#1a5fa8","#0d8a7c","#7c3aed","#d97706","#dc2626","#16a34a"][i%6],
+                      flexShrink:0}}/>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:13}}>{d.nom}</div>
+                      <div style={{fontSize:11,color:C.muted}}>{d.nb_vendors} vendor{d.nb_vendors>1?"s":""} · {d.pieces} units</div>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontWeight:800,fontSize:14,color:d.ventes>0?C.green:C.muted}}>
+                      {d.ventes>0?`${fmt(d.ventes)} FCFA`:"—"}
+                    </div>
+                    <div style={{fontSize:10,color:C.muted}}>{d.declarations} declarations</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </>)}
 
         {/* ══ PERFORMANCE ══ */}

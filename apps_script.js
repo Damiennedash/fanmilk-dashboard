@@ -121,6 +121,7 @@ function buildData() {
     vendors            : buildVendors(venRows, validRows),
     depots             : buildDepots(monthRows),
     depot_today        : buildDepotToday(todaySales),
+    depot_yesterday    : buildDepotYesterday(validRows, today, yesterday),
     weekly             : buildWeekly(validRows),
     hotspots           : buildHotspots(monthRows),
     morning_vs_evening : buildMorningEvening(monthRows),
@@ -362,6 +363,37 @@ function buildDepotToday(todaySales) {
       nb_vendors:d.vendors.size, ventes:d.ventes,
       fanxtra:d.fx, fanchoco:d.fc, fanvan:d.fv, pieces:d.fx+d.fc+d.fv};
   }).sort(function(a,b){ return b.ventes-a.ventes; });
+}
+
+
+// ============================================================
+//  DEPOT YESTERDAY
+// ============================================================
+function buildDepotYesterday(validRows, today, yesterday) {
+  var m = {};
+  validRows.forEach(function(r) {
+    var ds   = toDateStr(r[R_DATE]);
+    var stat = String(r[R_STATUT]||"").trim();
+    var dep  = String(r[R_DEPOT] ||"").trim();
+    if (!dep) return;
+    // Ventes d'hier = lignes d'aujourd'hui avec "Je vais vendre"/"Non"
+    //              + toutes les lignes d'hier
+    var inclure = (ds===today && (stat==="Je vais vendre"||stat==="Non"))
+               || (ds===yesterday);
+    if (!inclure) return;
+    if (!m[dep]) m[dep]={nom:dep,declarations:0,vendors:new Set(),ventes:0,fx:0,fc:0,fv:0};
+    m[dep].declarations++;
+    var ph=String(r[R_PHONE]||"").trim(); if(ph) m[dep].vendors.add(ph);
+    m[dep].ventes += parseInt(r[R_VENTES])||0;
+    m[dep].fx     += parseInt(r[R_XTRA])  ||0;
+    m[dep].fc     += parseInt(r[R_CHOCO]) ||0;
+    m[dep].fv     += parseInt(r[R_VAN])   ||0;
+  });
+  return Object.values(m).map(function(d){
+    return {nom:d.nom, declarations:d.declarations, nb_vendors:d.vendors.size,
+      ventes:d.ventes, fanxtra:d.fx, fanchoco:d.fc, fanvan:d.fv,
+      pieces:d.fx+d.fc+d.fv};
+  }).sort(function(a,b){return b.ventes-a.ventes;});
 }
 
 
