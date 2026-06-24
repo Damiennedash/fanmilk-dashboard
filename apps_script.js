@@ -387,17 +387,14 @@ function buildDepotToday(todaySales) {
 //  + toutes les lignes d'hier
 // ============================================================
 function buildYesterdaySales(validRows, today, yesterday) {
-  // Ventes d'hier = UNIQUEMENT les lignes du JOUR J
-  // avec statut "Je vais vendre" ou "Non"
-  // (ces vendors renseignent ce qu'ils ont vendu la veille)
+  // Yesterday = TOUTES les lignes du jour J-1 (hier)
+  // On prend directement toutes les déclarations d'hier
+  // peu importe le statut
   var ventes=0, xtra=0, choco=0, van=0, count=0;
   var vendors = new Set();
   validRows.forEach(function(r) {
-    var ds   = toDateStr(r[R_DATE]);
-    var stat = String(r[R_STATUT]||"").trim();
-    // Seulement les déclarations d'aujourd'hui avec "Je vais vendre" ou "Non"
-    if (ds !== today) return;
-    if (stat !== "Je vais vendre" && stat !== "Non") return;
+    var ds = toDateStr(r[R_DATE]);
+    if (ds !== yesterday) return; // seulement les lignes d'hier
     ventes += parseInt(r[R_VENTES])||0;
     xtra   += parseInt(r[R_XTRA])  ||0;
     choco  += parseInt(r[R_CHOCO]) ||0;
@@ -407,13 +404,13 @@ function buildYesterdaySales(validRows, today, yesterday) {
     if (ph) vendors.add(ph);
   });
   return {
-    date        : yesterday,
-    nb          : count,
-    nb_vendors  : vendors.size,
-    ventes      : ventes,
-    xtra        : xtra,
-    choco       : choco,
-    van         : van,
+    date       : yesterday,
+    nb         : count,
+    nb_vendors : vendors.size,
+    ventes     : ventes,
+    xtra       : xtra,
+    choco      : choco,
+    van        : van,
   };
 }
 
@@ -430,8 +427,8 @@ function buildDepotYesterday(validRows, today, yesterday) {
     if (!dep) return;
     // Ventes d'hier = lignes d'aujourd'hui avec "Je vais vendre"/"Non"
     //              + toutes les lignes d'hier
-    // Ventes d'hier = seulement déclarations du JOUR J avec "Je vais vendre" ou "Non"
-    var inclure = (ds===today && (stat==="Je vais vendre"||stat==="Non"));
+    // Ventes d'hier = toutes les lignes du jour J-1
+    var inclure = (ds===yesterday);
     if (!inclure) return;
     if (!m[dep]) m[dep]={nom:dep,declarations:0,vendors:new Set(),ventes:0,fx:0,fc:0,fv:0};
     m[dep].declarations++;
