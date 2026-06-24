@@ -122,7 +122,7 @@ function buildData() {
   return {
     updated_at         : new Date().toISOString(),
     today_date         : today,
-    overview           : buildOverview(monthRows, todayRows, todaySales, venRows, yesterday, validRows),
+    overview           : buildOverview(monthRows, todayRows, todaySales, venRows, yesterday, validRows, month),
     today              : buildToday(todayRows, todaySales),
     vendors            : buildVendors(venRows, validRows),
     depots             : buildDepots(monthRows),
@@ -149,7 +149,7 @@ function buildData() {
 //  - Ventes du jour (J ai deja vendu uniquement)
 //  - Problème équipement aujourd'hui (0 ou >0)
 // ============================================================
-function buildOverview(monthRows, todayRows, todaySales, venRows, yesterday, validRows) {
+function buildOverview(monthRows, todayRows, todaySales, venRows, yesterday, validRows, month) {
   // ── MTD — somme de TOUTES les ventes du mois ─────────────
   var totalVentesMTD=0, totalXtraMTD=0, totalChocoMTD=0, totalVanMTD=0;
   var vendorsActifs = new Set();
