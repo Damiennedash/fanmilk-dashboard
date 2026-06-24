@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  LineChart, Line, CartesianGrid, Legend, Cell
+  LineChart, Line, CartesianGrid, Legend, Cell, LabelList
 } from "recharts";
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || "";
@@ -406,12 +406,12 @@ export default function App() {
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 12px"}}>
             <H>🏪 Sales by Depot — MTD (FCFA)</H>
             <ResponsiveContainer width="100%" height={depots.length*52+40}>
-              <BarChart data={depotBarData} layout="vertical" margin={{left:0,right:10}}>
+              <BarChart data={depotBarData} layout="vertical" margin={{left:0,right:50}}>
                 <XAxis type="number" tick={{fontSize:10}} tickFormatter={v=>`${v}k`}/>
                 <YAxis type="category" dataKey="name" tick={{fontSize:10}} width={70}/>
                 <Tooltip formatter={(v,n)=>n==="Sales FCFA"?[`${v}k FCFA`,n]:[v,n]}/>
                 <Legend wrapperStyle={{fontSize:11}}/>
-                <Bar dataKey="Sales FCFA" radius={[0,4,4,0]}>
+                <Bar dataKey="Sales FCFA" radius={[0,4,4,0]} label={{position:"right",fontSize:10,formatter:(v)=>v+"k"}}>
                   {depotBarData.map((_,i)=><Cell key={i} fill={DEPOT_COLORS[i%DEPOT_COLORS.length]}/>)}
                 </Bar>
               </BarChart>
