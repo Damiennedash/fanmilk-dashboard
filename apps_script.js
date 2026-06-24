@@ -150,54 +150,21 @@ function buildData() {
 //  - Problème équipement aujourd'hui (0 ou >0)
 // ============================================================
 function buildOverview(monthRows, todayRows, todaySales, venRows, yesterday) {
-  // ── MTD — calcul par VRAIE date de vente ─────────────────
-  // "J'ai déjà vendu" → ventes du jour J
-  // "Je vais vendre" / "Non" → ventes du jour J-1
-  // On groupe par vraie date et on filtre par mois courant
-  var ventesMTD    = {};  // vraieDate → {ventes, xtra, choco, van}
+  // ── MTD — somme de TOUTES les ventes du mois ─────────────
+  var totalVentesMTD=0, totalXtraMTD=0, totalChocoMTD=0, totalVanMTD=0;
   var vendorsActifs = new Set();
   var vendorDays    = new Set();
 
-  validRows.forEach(function(r) {
-    var ph   = String(r[R_PHONE]  ||"").trim();
-    var stat = String(r[R_STATUT] ||"").trim();
-    var ds   = toDateStr(r[R_DATE]);
-    if (!ph || !ds) return;
-
-    // Calculer la vraie date de vente
-    var vraieDate;
-    if (stat === "J ai deja vendu") {
-      vraieDate = ds;  // ventes du jour même
-    } else {
-      // Je vais vendre / Non → ventes du jour précédent
-      var p = ds.split("/");
-      var d = new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0]));
-      d.setDate(d.getDate() - 1);
-      vraieDate = Utilities.formatDate(d, TIMEZONE, "dd/MM/yyyy");
+  monthRows.forEach(function(r) {
+    totalVentesMTD += parseInt(r[R_VENTES])||0;
+    totalXtraMTD   += parseInt(r[R_XTRA])  ||0;
+    totalChocoMTD  += parseInt(r[R_CHOCO]) ||0;
+    totalVanMTD    += parseInt(r[R_VAN])   ||0;
+    var ph = String(r[R_PHONE]||"").trim();
+    if (ph) {
+      vendorsActifs.add(ph);
+      vendorDays.add(ph + "_" + toDateStr(r[R_DATE]));
     }
-
-    // Filtrer par mois courant (la vraie date doit être dans le mois)
-    var vp = vraieDate.split("/");
-    if (vp.length < 3) return;
-    var vmm  = vp[1].length===1?"0"+vp[1]:vp[1];
-    var vyyyy = vp[2];
-    if ((vmm+"/"+vyyyy) !== month) return;
-
-    // Accumuler
-    if (!ventesMTD[vraieDate]) ventesMTD[vraieDate] = {v:0,x:0,c:0,van:0};
-    ventesMTD[vraieDate].v   += parseInt(r[R_VENTES])||0;
-    ventesMTD[vraieDate].x   += parseInt(r[R_XTRA])  ||0;
-    ventesMTD[vraieDate].c   += parseInt(r[R_CHOCO]) ||0;
-    ventesMTD[vraieDate].van += parseInt(r[R_VAN])   ||0;
-
-    vendorsActifs.add(ph);
-    vendorDays.add(ph + "_" + ds);
-  });
-
-  var totalVentesMTD=0, totalXtraMTD=0, totalChocoMTD=0, totalVanMTD=0;
-  Object.values(ventesMTD).forEach(function(d){
-    totalVentesMTD += d.v; totalXtraMTD += d.x;
-    totalChocoMTD  += d.c; totalVanMTD  += d.van;
   });
 
   var totalPiecesMTD  = totalXtraMTD + totalChocoMTD + totalVanMTD;
